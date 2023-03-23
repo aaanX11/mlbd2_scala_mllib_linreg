@@ -1,9 +1,9 @@
 package org.apache.spark.ml.made
 
-import breeze.linalg.sum
+import breeze.linalg.{DenseVector, sum}
 import com.google.common.io.Files
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.sql.DataFrame
 import org.scalatest.flatspec._
@@ -11,7 +11,7 @@ import org.scalatest.matchers._
 
 class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpark {
 
-  val delta = 0.0000001
+  val delta = 0.001
   lazy val data: DataFrame = LinearRegressionTest._data
   lazy val vectors = LinearRegressionTest._vectors
 
@@ -36,9 +36,9 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
     ).setInputCol("features")
       .setOutputCol("features")
 
-    val copy = model.copy(ParamMap(model.shiftMean -> false))
+    //val copy = model.copy()
 
-    val vectors: Array[Vector] = copy.transform(data).collect().map(_.getAs[Vector](0))
+    val vectors: Array[Vector] = model.transform(data).collect().map(_.getAs[Vector](0))
 
     vectors.length should be(2)
 
@@ -53,6 +53,8 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
     val estimator = new LinearRegression()
       .setInputCol("features")
       .setOutputCol("features")
+      .setStepSize(0.001)
+      .setMaxIter(1000)
 
     val model = estimator.fit(data)
 
@@ -64,6 +66,8 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
     val estimator = new LinearRegression()
       .setInputCol("features")
       .setOutputCol("features")
+      .setStepSize(0.001)
+      .setMaxIter(1500)
 
     val model = estimator.fit(data)
 

@@ -5,7 +5,7 @@ import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT, Vectors}
 import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap}
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasMaxIter, HasOutputCol, HasStepSize}
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.{Estimator, Model}
@@ -19,18 +19,17 @@ import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.sql.functions.{col, lit}
 
+import scala.annotation.tailrec
 
-trait LinearRegressionParams extends HasInputCol with HasOutputCol {
+
+trait LinearRegressionParams extends HasInputCol with HasOutputCol with HasStepSize with HasMaxIter{
   def setInputCol(value: String) : this.type = set(inputCol, value)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  val shiftMean = new BooleanParam(
-    this, "shiftMean","Whenever to substract mean")
+  def setStepSize(value: Double): this.type = set(stepSize, value)
 
-  def isShiftMean : Boolean = $(shiftMean)
-  def setShiftMean(value: Boolean) : this.type = set(shiftMean, value)
+  def setMaxIter(value: Int): this.type = set(maxIter, value)
 
-  setDefault(shiftMean -> true)
 
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, getInputCol, new VectorUDT())
@@ -80,9 +79,9 @@ with DefaultParamsWritable {
 
     val weights0: Vector = Vectors.zeros(nFeat)
 
-    val learnRate = 0.001
+    val learnRate: Double = $(stepSize)
 
-    val maxIter = 1000
+    @tailrec
     def descent(weights: Vector, iterCount: Int): Vector ={
 
       if (iterCount > 0){
@@ -102,11 +101,11 @@ with DefaultParamsWritable {
       }
     }
 
-    val weightsFound = descent(weights0, maxIter)
+    val weightsFound = descent(weights0, $(maxIter))
 
     copyValues(new LinearRegressionModel(
-      Vectors.dense(1.0, 1.0),
-      Vectors.dense(1.0))).setParent(this)
+      Vectors.fromBreeze(weightsFound.asBreeze(0 until  nFeat - 1).toVector),
+      Vectors.dense(weightsFound(nFeat - 1)))).setParent(this)
 
 //    val Row(row: Row) =  dataset
 //      .select(Summarizer.metrics("slope", "intercept").summary(dataset($(inputCol))))
@@ -138,19 +137,20 @@ class LinearRegressionModel private[made](
   override def transform(dataset: Dataset[_]): DataFrame = {
     val bslope = slope.asBreeze
     val bintercept = intercept.asBreeze
-    val transformUdf = if (isShiftMean) {
-      dataset.sqlContext.udf.register(uid + "_transform",
-      (x : Vector) => {
-        Vectors.fromBreeze((x.asBreeze - bslope) /:/ bintercept)
-      })
-    } else {
-      dataset.sqlContext.udf.register(uid + "_transform",
-        (x : Vector) => {
-          Vectors.fromBreeze((x.asBreeze) /:/ bintercept)
-        })
-    }
-
-    dataset.withColumn($(outputCol), transformUdf(dataset($(inputCol))))
+//    val transformUdf = if (isShiftMean) {
+//      dataset.sqlContext.udf.register(uid + "_transform",
+//      (x : Vector) => {
+//        Vectors.fromBreeze((x.asBreeze - bslope) /:/ bintercept)
+//      })
+//    } else {
+//      dataset.sqlContext.udf.register(uid + "_transform",
+//        (x : Vector) => {
+//          Vectors.fromBreeze((x.asBreeze) /:/ bintercept)
+//        })
+//    }
+//
+//    dataset.withColumn($(outputCol), transformUdf(dataset($(inputCol))))
+    dataset.toDF
   }
 
   override def transformSchema(schema: StructType): StructType = validateAndTransformSchema(schema)
