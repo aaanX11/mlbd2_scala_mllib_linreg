@@ -3,9 +3,8 @@
 # There will be changes up to deadline 27.04
 
 TODO:
-1. Intercept
-2. Slope
-3. add loss calcaulation
-4. add stopping criterion
-5. add with HasMaxIter with HasLearningRate? with HasIntercept? with HasSlope?
-6. style
+1. fit without Intercept
+2. add loss calcaulation
+3. add stopping criterion
+4. file writing (win permission??)
+5. style
