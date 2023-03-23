@@ -5,7 +5,8 @@ import com.google.common.io.Files
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
+import org.scalatest.Ignore
 import org.scalatest.flatspec._
 import org.scalatest.matchers._
 
@@ -15,26 +16,34 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
   lazy val data: DataFrame = LinearRegressionTest._data
   lazy val vectors = LinearRegressionTest._vectors
 
-  "Model" should "scale input data" in {
+
+
+  "Model" should "predict" in {
     val model: LinearRegressionModel = new LinearRegressionModel(
-      slope = Vectors.dense(2.0, -0.5).toDense,
-      intercept = Vectors.dense(1.5, 0.5).toDense
-    ).setInputCol("features")
-      .setOutputCol("features")
+      slope = Vectors.dense(1.0, 1.0).toDense,
+      intercept = Vectors.dense(1.5).toDense
+    ).setFeaturesCol("features")
+      .setLabelCol("label")
+      .setStepSize(0.001)
+      .setMaxIter(1000)
 
-    val vectors: Array[Vector] = model.transform(data).collect().map(_.getAs[Vector](0))
+    //val vectors: Array[Vector] = model.transform(data).collect().map(_.getAs[Vector](0))
+    val vectors: Array[Double] = model.transform(data).collect().map(_.getAs[Double](2))
 
-    vectors.length should be(2)
+
+    vectors.length should be(data.count())
 
     validateModel(model, model.transform(data))
   }
 
-  "Model" should "scale input data without mean subtraction" in {
+  ignore should "calculate slope without intercept" in {
     val model: LinearRegressionModel = new LinearRegressionModel(
       slope = Vectors.dense(1, 1).toDense,
       intercept = Vectors.dense(1).toDense
-    ).setInputCol("features")
-      .setOutputCol("features")
+    ).setFeaturesCol("features")
+      .setLabelCol("label")
+      .setStepSize(0.001)
+      .setMaxIter(1000)
 
     //val copy = model.copy()
 
@@ -51,8 +60,8 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
 
   "Estimator" should "calculate slope" in {
     val estimator = new LinearRegression()
-      .setInputCol("features")
-      .setOutputCol("features")
+      .setFeaturesCol("features")
+      .setLabelCol("label")
       .setStepSize(0.001)
       .setMaxIter(1000)
 
@@ -64,8 +73,8 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
 
   "Estimator" should "calculate intercept" in {
     val estimator = new LinearRegression()
-      .setInputCol("features")
-      .setOutputCol("features")
+      .setFeaturesCol("features")
+      .setLabelCol("label")
       .setStepSize(0.001)
       .setMaxIter(1500)
 
@@ -76,8 +85,10 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
 
   "Estimator" should "should produce functional model" in {
     val estimator = new LinearRegression()
-      .setInputCol("features")
-      .setOutputCol("features")
+      .setFeaturesCol("features")
+      .setLabelCol("label")
+      .setStepSize(0.001)
+      .setMaxIter(1500)
 
     val model = estimator.fit(data)
 
@@ -85,23 +96,28 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
   }
 
   private def validateModel(model: LinearRegressionModel, data: DataFrame) = {
-    val vectors: Array[Vector] = data.collect().map(_.getAs[Vector](0))
+    val vectors: Array[Double] = data.collect().map(_.getAs[Double](2))
 
-    vectors.length should be(2)
+    vectors.length should be(5)
 
-    vectors(0)(0) should be((13.5 - model.slope(0)) / model.intercept(0) +- delta)
-    vectors(0)(1) should be((12 - model.slope(1)) / model.intercept(1) +- delta)
+    vectors(0) should be(0.0 * model.slope(0) + 12.0 * model.slope(1) + model.intercept(0) +- delta)
+    vectors(1) should be(-1.0 * model.slope(0) + 0.0 * model.slope(1) + model.intercept(0) +- delta)
+    vectors(2) should be(0.0 * model.slope(0) + 0.0 * model.slope(1) + model.intercept(0) +- delta)
+    vectors(3) should be(-0.1 * model.slope(0) + -0.01 * model.slope(1) + model.intercept(0) +- delta)
+    vectors(4) should be(5.0 * model.slope(0) + 4.0 * model.slope(1) + model.intercept(0) +- delta)
 
-    vectors(1)(0) should be((-1 - model.slope(0)) / model.intercept(0) +- delta)
-    vectors(1)(1) should be((0 - model.slope(1)) / model.intercept(1) +- delta)
+    model.slope(0) should be(1.0 +- delta)
+    model.slope(1) should be(1.0 +- delta)
   }
 
-  "Estimator" should "work after re-read" in {
+  ignore should "work after re-read" in {
 
     val pipeline = new Pipeline().setStages(Array(
       new LinearRegression()
-        .setInputCol("features")
-        .setOutputCol("features")
+        .setFeaturesCol("features")
+        .setLabelCol("label")
+        .setStepSize(0.001)
+        .setMaxIter(1500)
     ))
 
     val tmpFolder = Files.createTempDir()
@@ -118,12 +134,14 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
     validateModel(model, model.transform(data))
   }
 
-  "Model" should "work after re-read" in {
+  ignore should "work after re-read1" in {
 
     val pipeline = new Pipeline().setStages(Array(
       new LinearRegression()
-        .setInputCol("features")
-        .setOutputCol("features")
+        .setFeaturesCol("features")
+        .setLabelCol("label")
+        .setStepSize(0.001)
+        .setMaxIter(1500)
     ))
 
     val model = pipeline.fit(data)

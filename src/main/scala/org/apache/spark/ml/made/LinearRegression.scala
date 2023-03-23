@@ -5,7 +5,7 @@ import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT, Vectors}
 import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap}
-import org.apache.spark.ml.param.shared.{HasInputCol, HasMaxIter, HasOutputCol, HasStepSize}
+import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasFitIntercept, HasInputCol, HasLabelCol, HasMaxIter, HasOutputCol, HasPredictionCol, HasStandardization, HasStepSize, HasTol, HasWeightCol}
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.{Estimator, Model}
@@ -22,9 +22,17 @@ import org.apache.spark.sql.functions.{col, lit}
 import scala.annotation.tailrec
 
 
-trait LinearRegressionParams extends HasInputCol with HasOutputCol with HasStepSize with HasMaxIter{
-  def setInputCol(value: String) : this.type = set(inputCol, value)
-  def setOutputCol(value: String): this.type = set(outputCol, value)
+trait LinearRegressionParams extends HasMaxIter with HasTol
+  with HasFitIntercept with HasFeaturesCol
+  with HasLabelCol with HasPredictionCol with HasStepSize {
+  def setFeaturesCol(value: String) : this.type = set(featuresCol, value)
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  def setLabelCol(value: String): this.type = set(labelCol, value)
+
+  def setFitIntercept(value: Boolean) : this.type = set(fitIntercept, value)
+
+  def setTol(value: Double): this.type = set(tol, value)
 
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
@@ -32,13 +40,14 @@ trait LinearRegressionParams extends HasInputCol with HasOutputCol with HasStepS
 
 
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, getInputCol, new VectorUDT())
+    SchemaUtils.checkColumnType(schema, getFeaturesCol, new VectorUDT())
+    SchemaUtils.checkColumnType(schema, getLabelCol, new VectorUDT())
 
-    if (schema.fieldNames.contains($(outputCol))) {
-      SchemaUtils.checkColumnType(schema, getOutputCol, new VectorUDT())
+    if (schema.fieldNames.contains($(predictionCol))) {
+      SchemaUtils.checkColumnType(schema, getPredictionCol, new VectorUDT())
       schema
     } else {
-      SchemaUtils.appendColumn(schema, schema(getInputCol).copy(name = getOutputCol))
+      SchemaUtils.appendColumn(schema, schema(getLabelCol).copy(name = getPredictionCol))
     }
   }
 }
@@ -53,29 +62,29 @@ with DefaultParamsWritable {
     // Used to convert untyped dataframes to datasets with vectors
     implicit val encoder : Encoder[Vector] = ExpressionEncoder()
 
-    val listCols = List($(inputCol), "label")
+    val listCols = List($(featuresCol), $(labelCol))
     //val listCols = List($(inputCol))
     //val vectors: Dataset[Vector] = dataset.select(listCols.map(m=>col(m)):_*).as[Vector]
 
-    val allListCols = List($(inputCol), "constCol", "label")
+    val allListCols = List($(featuresCol), "constCol", $(labelCol))
     val vectors2: Dataset[Row] = dataset.select("*").withColumn("constCol", lit(1.0))
 
     val vectors4 = vectors2.select(allListCols.map(m=>col(m)):_*)
     val assembler = new VectorAssembler()
       .setInputCols(allListCols.toArray)
-      .setOutputCol("all_features")
+      .setOutputCol("all")
 
     val vectors3 = assembler.transform(vectors4)
 
-    val vectors5 = vectors3.map(_.getAs[Vector]("all_features"))
+    val vectors5 = vectors3.map(_.getAs[Vector]("all"))
     vectors5.foreach(v => println(v))
     //val vectors3 = vectors2.map(row => row)
 
     //val labels: Dataset[Vector] = dataset.select(dataset("label").as[Vector])
 
-    val nFeat: Int = AttributeGroup.fromStructField((dataset.schema($(inputCol)))).numAttributes.getOrElse(
-      vectors5.first().size
-    ) - 1
+    val nFeat: Int = AttributeGroup.fromStructField((dataset.schema($(featuresCol)))).numAttributes.getOrElse(
+      vectors5.first().size - 1
+    )
 
     val weights0: Vector = Vectors.zeros(nFeat)
 
@@ -137,20 +146,19 @@ class LinearRegressionModel private[made](
   override def transform(dataset: Dataset[_]): DataFrame = {
     val bslope = slope.asBreeze
     val bintercept = intercept.asBreeze
-//    val transformUdf = if (isShiftMean) {
-//      dataset.sqlContext.udf.register(uid + "_transform",
-//      (x : Vector) => {
-//        Vectors.fromBreeze((x.asBreeze - bslope) /:/ bintercept)
-//      })
-//    } else {
-//      dataset.sqlContext.udf.register(uid + "_transform",
-//        (x : Vector) => {
-//          Vectors.fromBreeze((x.asBreeze) /:/ bintercept)
-//        })
-//    }
-//
-//    dataset.withColumn($(outputCol), transformUdf(dataset($(inputCol))))
-    dataset.toDF
+    val transformUdf = if ($(fitIntercept)) {
+      dataset.sqlContext.udf.register(uid + "_transform",
+      (x : Vector) => {
+        x.asBreeze.dot(bslope) + bintercept(0)
+      })
+    } else {
+      dataset.sqlContext.udf.register(uid + "_transform",
+        (x : Vector) => {
+          (x.asBreeze.dot(bslope))
+        })
+    }
+
+    dataset.withColumn($(predictionCol), transformUdf(dataset($(featuresCol))))
   }
 
   override def transformSchema(schema: StructType): StructType = validateAndTransformSchema(schema)
