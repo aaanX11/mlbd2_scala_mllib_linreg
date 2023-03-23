@@ -1,5 +1,7 @@
 # mlbd2_scala_mllib_linreg
 
+# There will be changes up to deadline 27.04
+
 TODO:
 1. Intercept
 2. Slope
