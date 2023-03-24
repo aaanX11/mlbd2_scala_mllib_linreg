@@ -6,5 +6,6 @@ TODO:
 1. big random test
 2. add loss calcaulation
 3. add stopping criterion
-4. file writing (win permission??)
-5. style
+4. scaling
+5. file writing (win permission??)
+6. style
