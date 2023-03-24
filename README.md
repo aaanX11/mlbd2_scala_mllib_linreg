@@ -3,7 +3,7 @@
 # There will be changes up to deadline 27.03
 
 TODO:
-1. big random test
+1. maybe scale gradient by dataset size
 2. add loss calcaulation
 3. add stopping criterion
 4. scaling
