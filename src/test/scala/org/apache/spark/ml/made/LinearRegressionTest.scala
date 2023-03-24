@@ -2,13 +2,16 @@ package org.apache.spark.ml.made
 
 import breeze.linalg.{DenseVector, sum}
 import com.google.common.io.Files
+import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.{DataFrame, Encoder, Row, functions}
 import org.scalatest.Ignore
 import org.scalatest.flatspec._
 import org.scalatest.matchers._
+import org.apache.spark.sql.functions.{lit, rand, randn}
 import org.sparkproject.dmg.pmml.False
 
 class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpark {
@@ -21,9 +24,6 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
   lazy val vectors0 = LinearRegressionTest._vectors0
 
   lazy val dataRandom: DataFrame = LinearRegressionTest._dataRandom
-  lazy val vectorsRandom = LinearRegressionTest._vectorsRandom
-
-
 
   "Model" should "predict" in {
     val model: LinearRegressionModel = new LinearRegressionModel(
@@ -71,6 +71,22 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
     model.slope(0) should be(1.0 +- delta)
     model.slope(1) should be(1.0 +- delta)
   }
+
+  "Estimator" should "fit random data" in {
+    val estimator = new LinearRegression()
+      .setFeaturesCol("features")
+      .setLabelCol("label")
+      .setStepSize(0.00000005)
+      .setMaxIter(2500)
+
+    val model = estimator.fit(dataRandom)
+
+    model.slope(0) should be(10.0 * 1.4142 +- delta)
+    model.slope(1) should be(10.0 * 3.1415 +- delta)
+
+    model.intercept(0) should be(42.0 +- delta)
+  }
+
 
   "Estimator" should "calculate intercept" in {
     val estimator = new LinearRegression()
@@ -185,17 +201,22 @@ object LinearRegressionTest extends WithSpark {
     _vectors0.toDF("features", "label")
   }
 
-  lazy val _vectorsRandom = Seq(
-    Tuple2(Vectors.dense(100.0, 12.0), Vectors.dense(212.0)),
-    Tuple2(Vectors.dense(45.0, 10.0), Vectors.dense(100.0)),
-    Tuple2(Vectors.dense(0.25, 0.0), Vectors.dense(0.5)),
-    Tuple2(Vectors.dense(-0.1, -0.01), Vectors.dense(-0.21)),
-    Tuple2(Vectors.dense(-2.0, 4.0), Vectors.dense(0.0))
-  )
+  val n = 100000
+  val uni = breeze.stats.distributions.Uniform(-5.0, 5.0)
+  val norm = breeze.stats.distributions.Gaussian(0.0, 0.6)
+  val test1 = Seq.fill(n)(DenseVector.rand[Double](2, uni))
+  val test11 = Seq.fill(n)(norm.sample())
 
-  lazy val _dataRandom: DataFrame = {
+  val w = Vectors.dense(10.0 * 1.4142, 10.0 * 3.1415)
+  val w0 = 42
+  val _dataRandom: DataFrame = {
     import sqlc.implicits._
-    _vectorsRandom.toDF("features", "label")
+    test1.zip(test11).map(t => t match {
+      case(x, y) => Tuple2(Vectors.fromBreeze(x), Vectors.dense(x.dot(w.asBreeze) + w0 + y))
+    } ).toDF("features", "label")
+    //test1.map(x => Tuple2(Vectors.fromBreeze(x), Vectors.dense(breeze.linalg.sum(x)))).toDF("features", "label")
   }
 
+  val test = _dataRandom.head(4)
+  val d = 1
 }
