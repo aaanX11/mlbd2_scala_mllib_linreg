@@ -14,9 +14,6 @@ import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row}
-import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix}
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.sql.functions.{col, lit}
 
 import scala.annotation.tailrec
@@ -66,7 +63,8 @@ with DefaultParamsWritable {
     //val listCols = List($(inputCol))
     //val vectors: Dataset[Vector] = dataset.select(listCols.map(m=>col(m)):_*).as[Vector]
 
-    val allListCols = List($(featuresCol), "constCol", $(labelCol))
+    val allListCols = if ($(fitIntercept)) List($(featuresCol), "constCol", $(labelCol))  else listCols
+
     val vectors2: Dataset[Row] = dataset.select("*").withColumn("constCol", lit(1.0))
 
     val vectors4 = vectors2.select(allListCols.map(m=>col(m)):_*)
@@ -77,12 +75,12 @@ with DefaultParamsWritable {
     val vectors3 = assembler.transform(vectors4)
 
     val vectors5 = vectors3.map(_.getAs[Vector]("all"))
-    vectors5.foreach(v => println(v))
+    //vectors5.foreach(v => println(v))
     //val vectors3 = vectors2.map(row => row)
 
     //val labels: Dataset[Vector] = dataset.select(dataset("label").as[Vector])
 
-    val nFeat: Int = AttributeGroup.fromStructField((dataset.schema($(featuresCol)))).numAttributes.getOrElse(
+    val nFeat: Int = AttributeGroup.fromStructField(dataset.schema($(featuresCol))).numAttributes.getOrElse(
       vectors5.first().size - 1
     )
 
@@ -112,10 +110,15 @@ with DefaultParamsWritable {
 
     val weightsFound = descent(weights0, $(maxIter))
 
-    copyValues(new LinearRegressionModel(
-      Vectors.fromBreeze(weightsFound.asBreeze(0 until  nFeat - 1).toVector),
-      Vectors.dense(weightsFound(nFeat - 1)))).setParent(this)
-
+    if ($(fitIntercept)) {
+      copyValues(new LinearRegressionModel(
+        Vectors.fromBreeze(weightsFound.asBreeze(0 until nFeat - 1).toVector),
+        Vectors.dense(weightsFound(nFeat - 1)))).setParent(this)
+    } else {
+      copyValues(new LinearRegressionModel(
+        weightsFound,
+        Vectors.dense(Double.NaN))).setParent(this)
+    }
 //    val Row(row: Row) =  dataset
 //      .select(Summarizer.metrics("slope", "intercept").summary(dataset($(inputCol))))
 //      .first()

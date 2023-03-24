@@ -9,12 +9,19 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.scalatest.Ignore
 import org.scalatest.flatspec._
 import org.scalatest.matchers._
+import org.sparkproject.dmg.pmml.False
 
 class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpark {
 
   val delta = 0.001
   lazy val data: DataFrame = LinearRegressionTest._data
   lazy val vectors = LinearRegressionTest._vectors
+
+  lazy val data0: DataFrame = LinearRegressionTest._data0
+  lazy val vectors0 = LinearRegressionTest._vectors0
+
+  lazy val dataRandom: DataFrame = LinearRegressionTest._dataRandom
+  lazy val vectorsRandom = LinearRegressionTest._vectorsRandom
 
 
 
@@ -36,26 +43,20 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
     validateModel(model, model.transform(data))
   }
 
-  ignore should "calculate slope without intercept" in {
-    val model: LinearRegressionModel = new LinearRegressionModel(
-      slope = Vectors.dense(1, 1).toDense,
-      intercept = Vectors.dense(1).toDense
-    ).setFeaturesCol("features")
+  "Estimator" should "calculate slope without intercept" in {
+    val estimator = new LinearRegression()
+      .setFeaturesCol("features")
       .setLabelCol("label")
-      .setStepSize(0.001)
-      .setMaxIter(1000)
+      .setStepSize(0.00005)
+      .setMaxIter(2500)
+      .setFitIntercept(false)
 
-    //val copy = model.copy()
+    val model = estimator.fit(data0)
 
-    val vectors: Array[Vector] = model.transform(data).collect().map(_.getAs[Vector](0))
+    model.slope(0) should be(2.0 +- delta)
+    model.slope(1) should be(1.0 +- delta)
 
-    vectors.length should be(2)
-
-    vectors(0)(0) should be((13.5) / 1.5 +- delta)
-    vectors(0)(1) should be((12) / 0.5 +- delta)
-
-    vectors(1)(0) should be((-1) / 1.5 +- delta)
-    vectors(1)(1) should be((0) / 0.5 +- delta)
+    model.intercept(0).isNaN should be(true)
   }
 
   "Estimator" should "calculate slope" in {
@@ -128,8 +129,8 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
 
     val model = reRead.fit(data).stages(0).asInstanceOf[LinearRegressionModel]
 
-    model.slope(0) should be(vectors.map(_(0)).sum / vectors.length +- delta)
-    model.slope(1) should be(vectors.map(_(1)).sum / vectors.length +- delta)
+    //model.slope(0) should be(vectors.map(_(0)).sum / vectors.length +- delta)
+    //model.slope(1) should be(vectors.map(_(1)).sum / vectors.length +- delta)
 
     validateModel(model, model.transform(data))
   }
@@ -159,12 +160,6 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
 object LinearRegressionTest extends WithSpark {
 
   lazy val _vectors = Seq(
-    Vectors.dense(0.0, 12.0, 13.0),
-    Vectors.dense(-1.0, 0.0, 1.0),
-    Vectors.dense(5.0, 4.0, 10.0)
-  )
-
-  lazy val _vectors2 = Seq(
     Tuple2(Vectors.dense(0.0, 12.0), Vectors.dense(13.0)),
     Tuple2(Vectors.dense(-1.0, 0.0), Vectors.dense(0.0)),
     Tuple2(Vectors.dense(0.0, 0.0), Vectors.dense(1.0)),
@@ -174,8 +169,33 @@ object LinearRegressionTest extends WithSpark {
 
   lazy val _data: DataFrame = {
     import sqlc.implicits._
-    //_vectors.map(x => Tuple1(x)).toDF("features", "label")
-    _vectors2.toDF("features", "label")
+    _vectors.toDF("features", "label")
+  }
+
+  lazy val _vectors0 = Seq(
+    Tuple2(Vectors.dense(100.0, 12.0), Vectors.dense(212.0)),
+    Tuple2(Vectors.dense(45.0, 10.0), Vectors.dense(100.0)),
+    Tuple2(Vectors.dense(0.25, 0.0), Vectors.dense(0.5)),
+    Tuple2(Vectors.dense(-0.1, -0.01), Vectors.dense(-0.21)),
+    Tuple2(Vectors.dense(-2.0, 4.0), Vectors.dense(0.0))
+  )
+
+  lazy val _data0: DataFrame = {
+    import sqlc.implicits._
+    _vectors0.toDF("features", "label")
+  }
+
+  lazy val _vectorsRandom = Seq(
+    Tuple2(Vectors.dense(100.0, 12.0), Vectors.dense(212.0)),
+    Tuple2(Vectors.dense(45.0, 10.0), Vectors.dense(100.0)),
+    Tuple2(Vectors.dense(0.25, 0.0), Vectors.dense(0.5)),
+    Tuple2(Vectors.dense(-0.1, -0.01), Vectors.dense(-0.21)),
+    Tuple2(Vectors.dense(-2.0, 4.0), Vectors.dense(0.0))
+  )
+
+  lazy val _dataRandom: DataFrame = {
+    import sqlc.implicits._
+    _vectorsRandom.toDF("features", "label")
   }
 
 }
