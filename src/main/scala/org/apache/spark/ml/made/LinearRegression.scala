@@ -89,26 +89,27 @@ with DefaultParamsWritable {
     val learnRate: Double = $(stepSize)
 
     @tailrec
-    def descent(weights: Vector, iterCount: Int): Vector ={
-
+    def descent(weights: Vector, iterCount: Int): (Vector, Double) ={
+      val diff = vectors5.rdd.map((x: Vector) =>
+        (x.asBreeze(0 until nFeat).toDenseVector.dot(weights.asBreeze) - x.asBreeze(nFeat))
+      )
       if (iterCount > 0){
-        val whatisit = vectors5.rdd.map((x: Vector) =>
-          2.0 * learnRate * (x.asBreeze(0 until nFeat).toDenseVector.dot(weights.asBreeze) - x.asBreeze(nFeat)) * x.asBreeze(0 until nFeat).toVector
-        )
+//        val whatisit = vectors5.rdd.map((x: Vector) =>
+//          2.0 * learnRate * (x.asBreeze(0 until nFeat).toDenseVector.dot(weights.asBreeze) - x.asBreeze(nFeat)) * x.asBreeze(0 until nFeat).toVector
+//        )
 
-        //    val whatisit = vectors2.rdd.map((x: Vector) =>
-        //      2.0 * learnRate * (x.asBreeze(0 to nFeat-2).toDenseVector.dot(weights.asBreeze) - x.asBreeze(nFeat-1))* x.asBreeze
-        //    )
+        val grad = (diff zip vectors5.rdd).map(t => t match {
+          case (d, x) => 2.0 * d * x.asBreeze(0 until nFeat).toVector
+        }).reduce((a, b) => a + b)
 
-        val whatisit2 = whatisit.reduce((a, b) => a + b)
-
-        descent(Vectors.fromBreeze(weights.asBreeze - whatisit2), iterCount - 1)
+        descent(Vectors.fromBreeze(weights.asBreeze - learnRate * grad), iterCount - 1)
       } else {
-        weights
+        val loss = diff.reduce(_ + _)
+        (weights, loss)
       }
     }
 
-    val weightsFound = descent(weights0, $(maxIter))
+    val (weightsFound, loss) = descent(weights0, $(maxIter))
 
     if ($(fitIntercept)) {
       copyValues(new LinearRegressionModel(
