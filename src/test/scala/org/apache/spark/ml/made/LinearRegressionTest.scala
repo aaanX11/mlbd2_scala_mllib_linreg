@@ -71,8 +71,8 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
     val estimator = new LinearRegression()
       .setFeaturesCol("features")
       .setLabelCol("label")
-      .setStepSize(0.0009)
-      .setMaxIter(4000)
+      .setStepSize(0.0017)
+      .setMaxIter(4500)
 
     val model = estimator.fit(dataRandom)
 

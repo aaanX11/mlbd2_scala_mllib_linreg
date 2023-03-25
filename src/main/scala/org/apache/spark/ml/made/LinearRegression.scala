@@ -1,6 +1,7 @@
 package org.apache.spark.ml.made
 
 import breeze.linalg.Matrix.castOps
+import breeze.linalg.norm
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT, Vectors}
@@ -91,11 +92,11 @@ with DefaultParamsWritable {
     val nRecord = vectors5.count() // ??? no shuffling ??
 
     @tailrec
-    def descent(weights: Vector, iterCount: Int): (Vector, Double) ={
+    def descent(weights: Vector, iterCount: Int, grad0Norm: Double, gradNorm: Double): (Vector, Double) ={
       val diff = vectors5.rdd.map((x: Vector) =>
         (x.asBreeze(0 until nFeat).toDenseVector.dot(weights.asBreeze) - x.asBreeze(nFeat)) / nRecord.toDouble
       )
-      if (iterCount > 0){
+      if (iterCount > 0){// && !grad0Norm.isNaN && !gradNorm.isNaN && gradNorm / grad0Norm > $(tol)){
 //        val whatisit = vectors5.rdd.map((x: Vector) =>
 //          2.0 * learnRate * (x.asBreeze(0 until nFeat).toDenseVector.dot(weights.asBreeze) - x.asBreeze(nFeat)) * x.asBreeze(0 until nFeat).toVector
 //        )
@@ -104,14 +105,16 @@ with DefaultParamsWritable {
           case (d, x) => 2.0 * d * x.asBreeze(0 until nFeat).toVector
         }).reduce((a, b) => a + b)
 
-        descent(Vectors.fromBreeze(weights.asBreeze - learnRate * grad), iterCount - 1)
+        val grad0NormNew = if (!grad0Norm.isNaN) grad0Norm else norm(grad)
+        val gradNormNew = norm(grad)
+        descent(Vectors.fromBreeze(weights.asBreeze - learnRate * grad), iterCount - 1, grad0NormNew, gradNormNew)
       } else {
         val loss = diff.reduce(_ + _)
         (weights, loss)
       }
     }
 
-    val (weightsFound, loss) = descent(weights0, $(maxIter))
+    val (weightsFound, loss) = descent(weights0, $(maxIter), Double.NaN, Double.NaN)
 
     if ($(fitIntercept)) {
       copyValues(new LinearRegressionModel(
