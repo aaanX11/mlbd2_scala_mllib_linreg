@@ -88,10 +88,12 @@ with DefaultParamsWritable {
 
     val learnRate: Double = $(stepSize)
 
+    val nRecord = vectors5.count() // ??? no shuffling ??
+
     @tailrec
     def descent(weights: Vector, iterCount: Int): (Vector, Double) ={
       val diff = vectors5.rdd.map((x: Vector) =>
-        (x.asBreeze(0 until nFeat).toDenseVector.dot(weights.asBreeze) - x.asBreeze(nFeat))
+        (x.asBreeze(0 until nFeat).toDenseVector.dot(weights.asBreeze) - x.asBreeze(nFeat)) / nRecord.toDouble
       )
       if (iterCount > 0){
 //        val whatisit = vectors5.rdd.map((x: Vector) =>
