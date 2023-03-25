@@ -28,6 +28,7 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
       .setLabelCol("label")
       .setStepSize(0.001)
       .setMaxIter(1000)
+      .setTol(0.001)
 
     //val vectors: Array[Vector] = model.transform(data).collect().map(_.getAs[Vector](0))
     val vectors: Array[Double] = model.transform(data).collect().map(_.getAs[Double](2))
@@ -45,6 +46,7 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
       .setStepSize(0.00005)
       .setMaxIter(2500)
       .setFitIntercept(false)
+      .setTol(0.001)
 
     val model = estimator.fit(data0)
 
@@ -60,6 +62,7 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
       .setLabelCol("label")
       .setStepSize(0.001)
       .setMaxIter(1000)
+      .setTol(0.001)
 
     val model = estimator.fit(data)
 
@@ -71,8 +74,9 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
     val estimator = new LinearRegression()
       .setFeaturesCol("features")
       .setLabelCol("label")
-      .setStepSize(0.0017)
+      .setStepSize(0.003)
       .setMaxIter(4500)
+      .setTol(0.001)
 
     val model = estimator.fit(dataRandom)
 
@@ -89,6 +93,7 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
       .setLabelCol("label")
       .setStepSize(0.001)
       .setMaxIter(1500)
+      .setTol(0.001)
 
     val model = estimator.fit(data)
 
@@ -101,6 +106,7 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
       .setLabelCol("label")
       .setStepSize(0.001)
       .setMaxIter(1500)
+      .setTol(0.001)
 
     val model = estimator.fit(data)
 
@@ -130,6 +136,7 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
         .setLabelCol("label")
         .setStepSize(0.001)
         .setMaxIter(1500)
+        .setTol(0.001)
     ))
 
     val tmpFolder = Files.createTempDir()
@@ -146,7 +153,11 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
     validateModel(model, model.transform(data))
   }
 
-  ignore should "work after re-read1" in {
+  // not working on windows. Write part ok, read part fails with the error:
+  // An exception or error caused a run to abort: 'org.apache.hadoop.io.nativeio.NativeIO$POSIX$Stat
+  // org.apache.hadoop.io.nativeio.NativeIO$POSIX.stat(java.lang.String)'
+  // java.lang.UnsatisfiedLinkError
+  "Model" should "work after re-read1" in {
 
     val pipeline = new Pipeline().setStages(Array(
       new LinearRegression()
@@ -154,17 +165,20 @@ class LinearRegressionTest extends AnyFlatSpec with should.Matchers with WithSpa
         .setLabelCol("label")
         .setStepSize(0.001)
         .setMaxIter(1500)
+        .setTol(0.001)
     ))
 
     val model = pipeline.fit(data)
 
     val tmpFolder = Files.createTempDir()
-
-    model.write.overwrite().save(tmpFolder.getAbsolutePath)
+    val tmpFile = tmpFolder.getAbsolutePath
+    println(tmpFile)
+    model.write.overwrite().save(tmpFile)
 
     val reRead: PipelineModel = PipelineModel.load(tmpFolder.getAbsolutePath)
 
-    validateModel(model.stages(0).asInstanceOf[LinearRegressionModel], reRead.transform(data))
+    val dataTransformed = reRead.transform(data)
+    validateModel(model.stages(0).asInstanceOf[LinearRegressionModel], dataTransformed)
   }
 }
 

@@ -96,7 +96,9 @@ with DefaultParamsWritable {
       val diff = vectors5.rdd.map((x: Vector) =>
         (x.asBreeze(0 until nFeat).toDenseVector.dot(weights.asBreeze) - x.asBreeze(nFeat)) / nRecord.toDouble
       )
-      if (iterCount > 0){// && !grad0Norm.isNaN && !gradNorm.isNaN && gradNorm / grad0Norm > $(tol)){
+      if ((iterCount > 0) && (grad0Norm.isNaN || gradNorm / grad0Norm > $(tol))){
+
+
 //        val whatisit = vectors5.rdd.map((x: Vector) =>
 //          2.0 * learnRate * (x.asBreeze(0 until nFeat).toDenseVector.dot(weights.asBreeze) - x.asBreeze(nFeat)) * x.asBreeze(0 until nFeat).toVector
 //        )
@@ -104,9 +106,9 @@ with DefaultParamsWritable {
         val grad = (diff zip vectors5.rdd).map(t => t match {
           case (d, x) => 2.0 * d * x.asBreeze(0 until nFeat).toVector
         }).reduce((a, b) => a + b)
-
-        val grad0NormNew = if (!grad0Norm.isNaN) grad0Norm else norm(grad)
         val gradNormNew = norm(grad)
+        val grad0NormNew = if (!grad0Norm.isNaN) grad0Norm else gradNormNew
+
         descent(Vectors.fromBreeze(weights.asBreeze - learnRate * grad), iterCount - 1, grad0NormNew, gradNormNew)
       } else {
         val loss = diff.reduce(_ + _)
